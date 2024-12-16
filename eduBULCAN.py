@@ -26,7 +26,6 @@ def get_encoded_path(full_url):
         )
     return urllib.parse.quote(path[1], safe="").lower()
 
-
 def get_digest(body):
     if not body:
         return None
@@ -34,7 +33,6 @@ def get_digest(body):
     m = hashlib.sha256()
     m.update(bytes(body, "utf-8"))
     return base64.b64encode(m.digest()).decode("utf-8")
-
 
 def get_headers_list(body, digest, canonical_url, timestamp):
     sign_data = [
@@ -47,7 +45,6 @@ def get_headers_list(body, digest, canonical_url, timestamp):
         " ".join(item[0] for item in sign_data if item),
         "".join(item[1] for item in sign_data if item),
     )
-
 
 def get_signature(data, private_key):
     # Convert data to a string representatio
@@ -71,7 +68,6 @@ def get_signature(data, private_key):
     # Encode the signature in base64 and return
     return base64.b64encode(signature).decode("utf-8")
 
-
 def get_signature_values(fingerprint, private_key, body, full_url, timestamp):
     canonical_url = get_encoded_path(full_url)
     digest = get_digest(body)
@@ -86,10 +82,8 @@ def get_signature_values(fingerprint, private_key, body, full_url, timestamp):
         ),
     )
 
-
 def pem_getraw(pem):
     return pem.decode("utf-8").replace("\n", "").split("-----")[2]
-
 
 def generate_key_pair():
     pkcs8 = crypto.PKey()
@@ -168,7 +162,15 @@ def APILogin(login, password):
     content = response.text
     cookie_jar = response.cookies.get_dict()
 
-    return content
+    soup = BeautifulSoup(content, "html.parser")
+    input_element = soup.find("input", {"id": "ap"})
+    value = input_element["value"]
+    parsed_json = json.loads(value)
+
+    tokens = parsed_json.get("Tokens", [])
+    token = " ".join(tokens)
+
+    return token
 
 def get_tenant_from_jwt(jwt_token):
     try:
@@ -200,7 +202,7 @@ def getRandomIdentifier():
 
     return ruuid
 
-def Login(): 
+def JWTLogin(token): 
     session = requests.Session()
     
     timestamp = datetime.now()
@@ -210,18 +212,8 @@ def Login():
     
     response = APILogin(login, password)
     
-    soup = BeautifulSoup(response, "html.parser")
-    input_element = soup.find("input", {"id": "ap"})
-    value = input_element["value"]
-    parsed_json = json.loads(value)
 
-    tokens = parsed_json.get("Tokens", [])
-    tokens_string = " ".join(tokens)
-    alias = parsed_json.get("Alias")
-    email = parsed_json.get("Email")
-    error_message = parsed_json.get("ErrorMessage")
-
-    tenant = get_tenant_from_jwt(tokens_string)
+    tenant = get_tenant_from_jwt(token)
 
     url = f"https://lekcjaplus.vulcan.net.pl/{tenant}/api/mobile/register/jwt"
     
@@ -233,7 +225,7 @@ def Login():
     Certificate = certificate
     CertificateThumbprint = fingerprint
     SelfIdentifier = getRandomIdentifier()  # Ensure this is a value (not a function)
-    Tokens = tokens_string
+    Tokens = token
     DeviceModel = "SM-G935F"
 
     signerurl = url
@@ -307,8 +299,8 @@ def Login():
 
 
 
-response1 = APILogin(login, password)
-response2 = Login()
+token = APILogin(login, password)
+response2 = JWTLogin(token)
 
 #print(response1)
 print(response2)
