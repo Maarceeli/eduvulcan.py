@@ -7,12 +7,8 @@ from bs4 import BeautifulSoup
 from uonet_request_signer_hebe import get_signature_values
 from uonet_request_signer_hebe import generate_key_pair
 
-timestamp = datetime.now()
-formatted_date = timestamp.strftime("%Y-%m-%d %H:%M:%S")
-date = timestamp.strftime("%a, %d %b %Y %H:%M:%S GMT") 
-
-login = "Login"
-password = "Passwrd"
+login = " "
+password = " "
 
 def APILogin(login, password):
     session = requests.Session()
@@ -100,8 +96,13 @@ def getRandomIdentifier():
 
     return ruuid
 
-def JWTLogin(): 
+def Login(): 
     session = requests.Session()
+    
+    timestamp = datetime.now()
+    formatted_date = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    date = timestamp.strftime("%a, %d %b %Y %H:%M:%S GMT") 
+    
     
     response = APILogin(login, password)
     
@@ -176,8 +177,8 @@ def JWTLogin():
     response1 = session.post(url, headers=headers, data=body_json)
     content1 = response1.text
 
-    url = "https://lekcjaplus.vulcan.net.pl/kielce/api/mobile/register/hebe?mode=2&lastSyncDate=1970-01-01%2001%3A00%3A00"
-    signerurl = "https://lekcjaplus.vulcan.net.pl/register/kielce/api/mobile/hebe?mode=2&lastSyncDate=1970-01-01%2001%3A00%3A00"
+    url = f"https://lekcjaplus.vulcan.net.pl/{tenant}/api/mobile/register/hebe?mode=2&lastSyncDate=1970-01-01%2001%3A00%3A00"
+    signerurl = f"https://lekcjaplus.vulcan.net.pl/{tenant}/api/mobile/register/hebe?mode=2&lastSyncDate=1970-01-01%2001%3A00%3A00"
     body = None
     timestamp1 = datetime.now()
     date1 = timestamp1.strftime("%a, %d %b %Y %H:%M:%S GMT")
@@ -203,7 +204,7 @@ def JWTLogin():
 
 
 response1 = APILogin(login, password)
-response2 = JWTLogin()
+response2 = Login()
 
 #print(response1)
 print(response2)
