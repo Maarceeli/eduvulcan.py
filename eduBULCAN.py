@@ -13,6 +13,8 @@ from cryptography.hazmat.backends import default_backend
 from bs4 import BeautifulSoup
 from OpenSSL import crypto
 
+session = requests.Session()
+
 login = input("Login ")
 password = input("\nPassword ")
 
@@ -108,8 +110,9 @@ def generate_key_pair():
 
 # End of signer functions
 
+certificate, fingerprint, private_key = generate_key_pair()
+
 def APILogin(login, password):
-    session = requests.Session()
     
     url = "https://eduvulcan.pl/"
     response1 = session.get(url)
@@ -172,10 +175,10 @@ def APILogin(login, password):
 
     return token
 
-def get_tenant_from_jwt(jwt_token):
+def get_tenant_from_jwt(token):
     try:
         # Split the JWT into parts
-        header, payload, signature = jwt_token.split('.')
+        header, payload, signature = token.split('.')
 
         # Decode the payload from Base64
         # Add padding 
@@ -203,16 +206,9 @@ def getRandomIdentifier():
     return ruuid
 
 def JWTLogin(token): 
-    session = requests.Session()
     
     timestamp = datetime.now()
-    formatted_date = timestamp.strftime("%Y-%m-%d %H:%M:%S")
     date = timestamp.strftime("%a, %d %b %Y %H:%M:%S GMT") 
-    
-    
-    response = APILogin(login, password)
-    
-
     tenant = get_tenant_from_jwt(token)
 
     url = f"https://lekcjaplus.vulcan.net.pl/{tenant}/api/mobile/register/jwt"
@@ -221,7 +217,6 @@ def JWTLogin(token):
     RequestId = getRandomIdentifier()  # Ensure this is a value (not a function)
     
     OS = "Android"
-    certificate, fingerprint, private_key = generate_key_pair()
     Certificate = certificate
     CertificateThumbprint = fingerprint
     SelfIdentifier = getRandomIdentifier()  # Ensure this is a value (not a function)
@@ -231,7 +226,6 @@ def JWTLogin(token):
     signerurl = url
     signerbody = None
     digest, canonical_url, signature = get_signature_values(fingerprint, private_key, signerbody, signerurl, timestamp)
-
 
     headers = {
         "accept-encoding": "gzip",
@@ -273,6 +267,9 @@ def JWTLogin(token):
     response1 = session.post(url, headers=headers, data=body_json)
     content1 = response1.text
 
+    return content1
+
+def HEBELogin(tenant):
     url = f"https://lekcjaplus.vulcan.net.pl/{tenant}/api/mobile/register/hebe?mode=2&lastSyncDate=1970-01-01%2001%3A00%3A00"
     signerurl = f"https://lekcjaplus.vulcan.net.pl/{tenant}/api/mobile/register/hebe?mode=2&lastSyncDate=1970-01-01%2001%3A00%3A00"
     body = None
@@ -295,13 +292,75 @@ def JWTLogin(token):
 
     response = requests.get(url, headers=headers)
     content = response.text
-    return response1, content1, response, content
+    return response, content
+
+def getUserInfo(tenant):
+    response, content = HEBELogin(tenant)
+
+    data = json.loads(content)
+    envelope = data.get("Envelope", [])[0]
+
+    pupil = envelope.get("Pupil", {})
+    unit = envelope.get("Unit", {})
+    links = envelope.get("Links", {})
+    ConstituentUnit = envelope.get("ConstituentUnit", {})
+
+    Name = pupil.get("FirstName", {})
+    SecondName = pupil.get("SecondName", {})
+    Surname = pupil.get("Surname", {})
+    Class = envelope.get("ClassDisplay", {})
+    PupilID = pupil.get("Id", {})
+    SchoolID = links.get("Symbol", {})
+    ConstituentID = ConstituentUnit.get("Id", {})
+
+    return Name, SecondName, Surname, Class, PupilID, SchoolID, ConstituentID
+
+def getLuckyNumber(tenant, schoolid, pupilid, constituentid):
+    timestamp = datetime.now()
+    date = timestamp.strftime("%Y-%m-%d") 
+    url = f"https://lekcjaplus.vulcan.net.pl/{tenant}/{schoolid}/api/mobile/school/lucky?pupilId={pupilid}&constituentId={constituentid}&day={date}"
+    
+    signerurl = url
+    body = None
+    date1 = timestamp.strftime("%a, %d %b %Y %H:%M:%S GMT")
+    digest, canonical_url, signature = get_signature_values(fingerprint, private_key, body, signerurl, timestamp=timestamp)
+
+    headers = {
+        "accept-encoding": "gzip",
+        "content-type": "application/json",
+        "host": "lekcjaplus.vulcan.net.pl",
+        "signature": signature,
+        "user-agent": "Dart/3.3 (dart:io)",
+        "vapi": "1",
+        "vcanonicalurl": canonical_url,
+        "vdate": date1,
+        "vos": "Android",
+        "vversioncode": "640",
+    }
+
+    response = requests.get(url, headers=headers)
+    content = response.text
+
+    data = json.loads(content)
+    Envelope = data.get("Envelope", {})
+    
+    LuckyNumberDay = Envelope.get("Day", {})
+    LuckyNumber = Envelope.get("Number", {})
+
+    return LuckyNumber, LuckyNumberDay
 
 
 
 token = APILogin(login, password)
+tenant = get_tenant_from_jwt(token)
 response2 = JWTLogin(token)
+#response3 = HEBELogin(tenant)
 
 #print(response1)
-print(response2)
+#print(response2)
+#print(response3)
+Name, SecondName, Surname, Class, PupilID, SchoolID, ConstituentID = getUserInfo(tenant)
+print(Name, Surname, Class, PupilID, SchoolID, ConstituentID)
+LuckyNumber, LuckyNumberDay = getLuckyNumber(tenant=tenant, schoolid=SchoolID, pupilid=PupilID, constituentid=ConstituentID)
+print(f"Lucky number: {LuckyNumber}")
 
