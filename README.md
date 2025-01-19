@@ -47,4 +47,8 @@ I dont know for now
 
 ## Disclaimer
 
-Eduvulcan CLI is an unofficial tool and is not affiliated with or endorsed by the Eduvulcan platform. Use it responsibly and ensure compliance with their terms of service.
+Eduvulcan CLI is an unofficial tool and is not affiliated with or endorsed by the Eduvulcan platform. Use it responsibly and ensure compliance with VULCAN ToS.
+
+
+
+README.md made with help of chatgpt.
