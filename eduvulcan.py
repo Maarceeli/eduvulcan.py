@@ -6,6 +6,7 @@ import hashlib
 import re
 import urllib
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -114,6 +115,28 @@ def generate_key_pair():
 # End of signer functions
 
 certificate, fingerprint, private_key = generate_key_pair()
+
+def savecredentials(filename, credentials):
+    with open(filename, 'w') as file:
+        json.dump(credentials, file, indent=4)
+
+def encodebase64(data):
+    return base64.b64encode(data.encode("utf-8")).decode("utf-8")
+
+def decodebase64(data):
+    return base64.b64decode(data.encode("utf-8")).decode("utf-8")
+
+def load_credentials_from_file(filename):
+    if not os.path.exists(filename):
+        print(f"{filename} does not exist.")
+        return None
+    
+    with open(filename, 'r') as file:
+        credentials = json.load(file)
+    
+    decodeduser = decodebase64(credentials['login'])
+    decodedpass = decodebase64(credentials['password'])
+    return {"login": decodeduser, "password": decodedpass}
 
 def getDebugInfo(data):
     data = json.loads(data)
@@ -412,7 +435,7 @@ def getGrades(tenant, schoolid, pupilid, unitid, periodid, debug=False):
 def ImportGradesToSQLite(content):
     data = json.loads(content)
 
-    conn = sqlite3.connect('grades_complete.db')
+    conn = sqlite3.connect('grades.db')
     cursor = conn.cursor()
 
     cursor.execute('''
@@ -573,10 +596,39 @@ def getTimetableForDay(day):
 
 
 if __name__ == '__main__':
-    login = input("Login ")
-    password = input("\nPassword ")
-    
+    today = datetime.today().strftime('%d-%m-%y')
     start_date, end_date = get_current_week()
+
+    filename = "credentials.json"
+
+    print("Welcome to eduVulcan CLI")
+    print("Github: https://github.com/Maarceeli/eduvulcan.py")
+    print("Use at your own responsibility\n")
+    
+    
+    if os.path.exists(filename):
+        credentials = load_credentials_from_file(filename)
+
+        login = credentials['login']
+        password = credentials['password']
+
+    if not os.path.exists(filename):
+        print("Please provide your login and password")
+        login = input("Login ")
+        password = input("\nPassword ")
+        
+        q = int(input("Do you want to save your credentials for future use? 1 = Yes, 2 = No "))
+        
+        if q == 1:
+            epass = encodebase64(password)
+            euser = encodebase64(login)
+            savecredentials("credentials.json", {"login": euser, "password": epass})
+
+            print("Credentials saved")
+        if q == 2:
+            print("Credentials not saved")
+        elif q != 1 and q != 2:
+            print("Invalid input, not saving credentials")
     
     token = APILogin(login, password)
     tenant = get_tenant_from_jwt(token)
@@ -584,10 +636,10 @@ if __name__ == '__main__':
     content, dinfoHEBE = HEBELogin(tenant, debug=debug)
 
     Name, SecondName, Surname, Class, PupilID, SchoolID, ConstituentID, UnitID, PeriodID = getUserInfo(tenant)
-#    print(Name, Surname, Class, PupilID, SchoolID, ConstituentID)
+    print(Name, Surname, Class, PupilID, SchoolID, ConstituentID)
 
     LuckyNumber, LuckyNumberDay, dinfoLUCK = getLuckyNumber(tenant=tenant, schoolid=SchoolID, pupilid=PupilID, constituentid=ConstituentID, debug=debug)
-#    print(f"Lucky number: {LuckyNumber}")
+    print(f"Lucky number: {LuckyNumber}")
 
     content, dinfoGRADE = getGrades(tenant=tenant, schoolid=SchoolID, pupilid=PupilID, unitid=UnitID, periodid=PeriodID, debug=debug)
     ImportGradesToSQLite(content)
@@ -598,11 +650,16 @@ if __name__ == '__main__':
     ImportTimetableToSQLite(response)
     print("Timetable imported to SQLite database")
 
-    #r = getTimetableForDay(day="16.01.2025")
-    #for lesson in r:
-    #    print(*lesson)
+    r = getTimetableForDay(day=today)
+    print(f"\nLessons for {today}:")
+    
+    if r == []:
+        print("No lessons for today")
+    else:
+        for lesson in r:
+            print(*lesson)
 
-    print(f"JWT Status: {dinfoJWT[0]} {dinfoJWT[1]}")
+    print(f"\nJWT Status: {dinfoJWT[0]} {dinfoJWT[1]}")
     print(f"HEBE Status: {dinfoHEBE[0]} {dinfoHEBE[1]}")
     print(f"Lucky Number Status: {dinfoLUCK[0]} {dinfoLUCK[1]}")
     print(f"Grades Status: {dinfoGRADE[0]} {dinfoGRADE[1]}")
