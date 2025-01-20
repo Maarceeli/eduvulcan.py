@@ -594,6 +594,90 @@ def getTimetableForDay(day):
 
     return lessons_for_day_sorted
 
+def getExams(tenant, schoolid, pupilid, start_date, end_date, debug=False):
+    url = f"https://lekcjaplus.vulcan.net.pl/{tenant}/{schoolid}/api/mobile/exam/byPupil?pupilId={pupilid}&dateFrom={start_date}&dateTo={end_date}&lastId=-2147483648&pageSize=500&lastSyncDate=1970-01-01%2001%3A00%3A00"
+    signerurl = url
+    body = None
+    date1 = datetime.now().strftime("%a, %d %b %Y %H:%M:%S GMT")
+    digest, canonical_url, signature = get_signature_values(fingerprint, private_key, body, signerurl, timestamp=datetime.now())
+
+    headers = {
+        "accept-encoding": "gzip",
+        "content-type": "application/json",
+        "host": "lekcjaplus.vulcan.net.pl",
+        "signature": signature,
+        "user-agent": "Dart/3.3 (dart:io)",
+        "vapi": "1",
+        "vcanonicalurl": canonical_url,
+        "vdate": date1,
+        "vos": "Android",
+        "vversioncode": "640",
+    }
+
+    response = requests.get(url, headers=headers)
+    content = response.text
+
+    if debug:
+        dinfo = getDebugInfo(content)
+        return content, dinfo
+
+    return content
+
+def ImportExamsToSQLite(content):
+    data = json.loads(content)
+    
+    conn = sqlite3.connect("exams.db")
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS exams (
+        id INTEGER PRIMARY KEY,
+        type TEXT,
+        content TEXT,
+        date_created TEXT,
+        date_modified TEXT,
+        deadline TEXT,
+        creator_name TEXT,
+        creator_surname TEXT,
+        subject_name TEXT,
+        pupil_id INTEGER
+    )
+    ''')
+
+    for entry in data['Envelope']:
+        cursor.execute('''
+        INSERT OR IGNORE INTO exams (
+            id, type, content, date_created, date_modified, deadline, 
+            creator_name, creator_surname, subject_name, pupil_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            entry.get('Id'),
+            entry.get('Type'),
+            entry.get('Content'),
+            entry.get('DateCreated', {}).get('DateDisplay'),
+            entry.get('DateModify', {}).get('DateDisplay'),
+            entry.get('Deadline', {}).get('DateDisplay'),
+            entry.get('Creator', {}).get('Name'),
+            entry.get('Creator', {}).get('Surname'),
+            entry.get('Subject', {}).get('Name'),
+            entry.get('PupilId')
+        ))
+    
+    conn.commit()
+    conn.close()
+
+def getExamsForWeek(start_date, end_date):
+    conn = sqlite3.connect("exams.db")
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    SELECT * FROM exams 
+    WHERE deadline BETWEEN ? AND ?
+    ORDER BY deadline ASC
+    ''', (start_date, end_date))
+    exams = cursor.fetchall()
+    conn.close()
+    return exams
 
 if __name__ == '__main__':
     today = datetime.today().strftime('%d-%m-%y')
@@ -646,7 +730,7 @@ if __name__ == '__main__':
     print("Grades imported to SQLite database")
 
     response, dinfoTIME = getTimetable(tenant=tenant, schoolid=SchoolID, pupilid=PupilID, start_date=start_date, end_date=end_date, debug=debug)
-
+    
     ImportTimetableToSQLite(response)
     print("Timetable imported to SQLite database")
 
@@ -659,8 +743,18 @@ if __name__ == '__main__':
         for lesson in r:
             print(*lesson)
 
+    content, dinfoEXAM = getExams(tenant=tenant, schoolid=SchoolID, pupilid=PupilID, start_date=start_date, end_date=end_date, debug=debug)
+
+    ImportExamsToSQLite(content)
+    print("Exams imported to SQLite database")
+
+    exams = getExamsForWeek(start_date, end_date)
+    for exam in exams:
+        print(*exam)
+    
     print(f"\nJWT Status: {dinfoJWT[0]} {dinfoJWT[1]}")
     print(f"HEBE Status: {dinfoHEBE[0]} {dinfoHEBE[1]}")
     print(f"Lucky Number Status: {dinfoLUCK[0]} {dinfoLUCK[1]}")
     print(f"Grades Status: {dinfoGRADE[0]} {dinfoGRADE[1]}")
     print(f"Timetable Status: {dinfoTIME[0]} {dinfoTIME[1]}")
+    print(f"Exams Status: {dinfoEXAM[0]} {dinfoEXAM[1]}")
